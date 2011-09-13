@@ -47,15 +47,15 @@ table {
 	border-spacing: 0;
 }
 
-
-ul.shortcut {
-    background: #CCC;
-    display: block;
-    width: 200px;
-    height: 20px;
-    cursor: pointer;
+.active {
+    border: 1px solid green;
 }
 
-    ul.shortcut > li {
-        display: inline-block;
+#example2 > li {
+    display: inline-block;
+    padding-right: 4px;
+}
+
+    #example2 > li.modifier {
+        border-bottom: 1px solid red;
     }

@@ -1,18 +1,19 @@
 Keanu = (function () {
     var MODIFIERS = [
-            16, // Shift
-            17, // Ctrl
-            18, // Alt
-            91, // Command
-            92  // Meta
+            '16', // Shift
+            '17', // Ctrl
+            '18', // Alt
+            '91', // Command
+            '92'  // Meta
+        ],
+        // Cancel if these are pressed
+        CANCEL_ON = [
+            '27', // Escape
+            '8',  // Backspace
+            '46'  // Delete
         ],
         // Special character transforms for displaying properly
         TRANSFORMS = {
-            32:  'Space',
-            37:  '&larr;', // Left arrow
-            38:  '&uarr;', // Up arrow
-            39:  '&rarr;', // Right arrow
-            40:  '&darr;', // Down arrow
             112: 'F1',
             113: 'F2',
             114: 'F3',
@@ -26,83 +27,34 @@ Keanu = (function () {
             122: 'F11',
             123: 'F12',
             13:  'Enter',
+            16:  'Shift',
+            17:  'Ctrl',
             186: ';',
             187: '=',
             188: ',',
             189: '-',
+            18:  'Alt',
             190: '.',
             191: '/',
             192: '`',
             219: '[',
             220: '\\',
             221: ']',
-            222: "'"
+            222: "'",
+            32:  'Space',
+            37:  'Left',
+            38:  'Up',
+            39:  'Down',
+            40:  'Right',
+            91:  'Cmd',
+            92:  'Meta'
         };
-    if(get_os() === "darwin"){
-        var darwin_transforms = {
-            13: '&#x21b5', // Enter
-            16: '&#x21E7', // Shift
-            17: '&#x2303', // Ctrl
-            18: '&#x2325', // Alt
-            32: '&#x2423'  // Space
-        };
 
-        // Merge the transforms
-        for(var key in darwin_transforms){
-            if(darwin_transforms.hasOwnProperty(key)){
-                TRANSFORMS[key] = darwin_transforms[key];
-            }
-        }
-    }
-
-    function render_which(which){
-        return TRANSFORMS[which] || String.fromCharCode(which);
-    }
-
-    function get_os(){
-        var oses = {
-                'Win'  : 'windows',
-                'Mac'  : 'darwin',
-                'Linux': 'linux',
-                'X11'  : 'unix'
-            },
-            os = 'unknown';
-        for (var os_key in oses){
-            if(navigator.appVersion.indexOf(os_key) != -1){
-                os = oses[os_key];
-                break;
-            }
-        }
-        return os;
-    }
-
-    function key_dict_to_string(key_dict){
-        var temp_array    = [],
-            return_string = "",
-            key_index;
-
-        for(var key in key_dict){
-            if(key_dict.hasOwnProperty(key)){
-                temp_array.push(key);
-            }
-        }
-
-        temp_array.sort();
-
-        for(key_index = 0; key_index < temp_array.length; key_index++){
-            return_string += temp_array[key_index];
-            if(key_index < temp_array.length - 1){
-                return_string += '_';
-            }
-        }
-        return return_string;
-    }
 
     function len(obj){
         if(obj.length){
             return obj.length;
         }
-
         else if(Object.keys){
             return Object.keys(obj).length;
         }
@@ -117,8 +69,96 @@ Keanu = (function () {
         }
     }
 
-    // Listen for new key chords being set
-    function get_key_array(options) {
+
+    function transform_which(which){
+        return TRANSFORMS[which] || String.fromCharCode(which);
+    }
+
+
+    // Sort an array of which entities
+    function sort_which(which_array){
+        which_array.sort(function(a, b){
+            if(
+                // Both modifiers
+                (MODIFIERS.indexOf(String(a)) !== -1 && MODIFIERS.indexOf(String(b)) !== -1) ||
+                // Both not modifiers
+                (MODIFIERS.indexOf(String(a)) === -1 && MODIFIERS.indexOf(String(b)) === -1)
+            ){
+                return 0;
+            }
+            // A is modifier
+            else if(MODIFIERS.indexOf(String(a)) !== -1){
+                return -1;
+            }
+
+            // Last case is that B is a modifier
+            return 1;
+        })
+
+        return which_array
+    }
+
+
+    // Transform a key hash map to a sorted shortcut
+    function key_map_to_shortcut(key_map){
+        if(typeof key_map === 'undefined' || key_map === {}){
+            return;
+        }
+
+        var key_array = [],
+            key_index;
+
+        for(var key_index in key_map){
+            if(key_map.hasOwnProperty(key_index)){
+                key_array.push(key_map[key_index].event.which);
+            }
+        }
+
+
+        return sort_which(key_array).map(function(elem){
+            return transform_which(elem);
+        }).join('+');
+    }
+
+
+    function key_map_to_key_array(key_map){
+        var key_array = [],
+            key_index, key;
+
+        for(var key_index in key_map){
+            if(key_map.hasOwnProperty(key_index)){
+                key = key_map[key_index];
+                key_array.push({
+                    'which': key.event.which,
+                    'is_modifier': MODIFIERS.indexOf(String(key.event.which)) >= 0 ? true: false,
+                    'display': transform_which(key.event.which)
+                })
+            }
+        }
+
+        key_array.sort(function(a, b){
+            if(
+                // Both modifiers
+                (a.is_modifier && b.is_modifier) ||
+                // Both not modifiers
+                (!a.is_modifier && !b.is_modifier)
+            ){
+                return 0;
+            }
+            // A is modifier
+            else if(a.is_modifier){
+                return -1;
+            }
+            // Last case is that B is a modifier
+            return 1;
+        })
+
+        return key_array;
+    }
+
+
+    // Listen for new shortcuts being set
+    function get_shortcut(options) {
         var keys_pressed  = {},
             // Options
             max_keys = typeof(options.max_keys) === 'undefined' ? 0 : options.max_keys,
@@ -126,18 +166,15 @@ Keanu = (function () {
             CLEANUP_DELAY = 200;
 
         function keydown_listener(event){
-            event.preventDefault();
-            event.stopImmediatePropagation();
             var which = event.which;
 
+            // Swallow up the key events
+            event.preventDefault();
+            event.stopImmediatePropagation();
+
             // tear_down on these characters
-            if(
-                which === 27 || // Escape
-                which === 8  || // Backspace
-                which === 46    // Delete
-            ){
-                cancel();
-                return;
+            if(CANCEL_ON.indexOf(String(which)) != -1){
+                return cancel();
             }
 
             if(
@@ -150,17 +187,19 @@ Keanu = (function () {
         }
 
         function dispatch_update(){
-            options.on_update(keys_pressed === {} ? false : key_dict_to_string(keys_pressed));
+            if(len(keys_pressed) && options.on_update){
+                options.on_update(key_map_to_shortcut(keys_pressed), key_map_to_key_array(keys_pressed));
+            }
         }
 
         function keyup_listener(event){
             event.preventDefault();
             var which = event.which;
+
             // Short circuit on command key release or else the keyup function
             // of the other keys wont ever fire.
             if(which === 91){
-                set_shortcut();
-                return;
+                return set_shortcut();
             }
 
             if(keys_pressed[which]){
@@ -176,7 +215,8 @@ Keanu = (function () {
             }
         }
 
-        // After CLEANUP_DELAY, remove the key based on the keycode if it exists and is inactive
+        // After CLEANUP_DELAY, remove the key based on the keycode if it
+        // exists and is inactive.
         function remove_inactive_keypress(which){
             if(keys_pressed[which] && keys_pressed[which].active === false){
                 delete keys_pressed[which];
@@ -184,29 +224,23 @@ Keanu = (function () {
             }
         }
 
-        function set_shortcut(){
-            // Verify that we have at least one non-modifier and any optional modifiers
-            var has_modifier     = false,
-                has_non_modifier = false;
-
-            // Convert the key hash to an array
+        function has_non_modifier(keys_pressed){
             for(var which in keys_pressed){
-                if(MODIFIERS.indexOf(which) >= 0){
-                    has_modifier = true;
-                }
-                else {
-                    has_non_modifier = true;
+                if(MODIFIERS.indexOf(which) === -1){
+                    return true;
                 }
             }
+            return false;
+        }
 
-            // Invalid keys_pressed
-            if(!has_non_modifier){
+        function set_shortcut(){
+            if(!has_non_modifier(keys_pressed)){
                 keys_pressed = {};
             }
-
             tear_down();
         }
 
+        // Cancel everything
         function cancel(event){
             if(event){
                 event.preventDefault();
@@ -216,10 +250,9 @@ Keanu = (function () {
             tear_down();
         }
 
-        // Shut. Down. Everything
         function tear_down(){
-            if(options.on_set){
-                options.on_set(keys_pressed === {} ? false : key_dict_to_string(keys_pressed));
+            if(len(keys_pressed) && options.on_set){
+                options.on_set(key_map_to_shortcut(keys_pressed), key_map_to_key_array(keys_pressed));
             }
 
             // Setting this to an empty object keeps any queued up cleanup
@@ -230,6 +263,8 @@ Keanu = (function () {
             window.removeEventListener('keydown', keydown_listener);
             window.removeEventListener('keyup', keyup_listener);
             window.removeEventListener('mousedown', cancel);
+            window.removeEventListener('blur', cancel);
+            window.removeEventListener('focus', cancel);
 
             if(options.on_complete){
                 options.on_complete();
@@ -240,28 +275,39 @@ Keanu = (function () {
         window.addEventListener('keydown', keydown_listener, false);
         window.addEventListener('keyup', keyup_listener, false);
         window.addEventListener('mousedown', cancel, false);
+
+        // Entering or leaving the window should cancel anything going on
+        window.addEventListener('blur', cancel, false);
+        window.addEventListener('focus', cancel, false);
     }
 
-    function listen ( callback ) {
+    function listen(callback){
         var keys_pressed = {};
 
         function dispatch_keychord(event){
-            if(keys_pressed !== {}){
-                callback(key_dict_to_string(keys_pressed), event);
+            if(len(keys_pressed)){
+                callback(key_map_to_shortcut(keys_pressed), key_map_to_key_array(keys_pressed), event);
             }
         }
 
         function keydown_listener(event){
-            var which = event.which;
+            if(
+                !event.target ||
+                event.target.tagName == 'BODY' ||
+                event.target.tagName == 'HTML' ||
+                event.target == document.documentElement
+            ){
+                var which = event.which;
 
-            if(which === 27){ // Cancel on escape
-                keys_pressed = {}; 
-                return;
-            }
+                // Tear_down on these characters
+                if(CANCEL_ON.indexOf(String(which)) != -1){
+                    return cancel();
+                }
 
-            if(keys_pressed[which] === undefined || keys_pressed[which].active === false){
-                keys_pressed[which] = {event: event, active: true};
-                dispatch_keychord(event);
+                if(keys_pressed[which] === undefined || keys_pressed[which].active === false){
+                    keys_pressed[which] = {event: event, active: true};
+                    dispatch_keychord(event);
+                }
             }
         }
 
@@ -269,6 +315,11 @@ Keanu = (function () {
             var which = event.which;
             delete keys_pressed[which];
             dispatch_keychord(event);
+        }
+
+        function cancel(){
+            keys_pressed = {};
+            return true;
         }
 
         function stop(){
@@ -280,14 +331,17 @@ Keanu = (function () {
         window.addEventListener('keydown', keydown_listener, true);
         window.addEventListener('keyup', keyup_listener, true);
 
+        // Entering and leaving the window should cancel any active presses
+        window.addEventListener('blur', cancel, true);
+        window.addEventListener('focus', cancel, true);
+
         return {
             stop: stop
         };
     }
 
     return {
-        listen        : listen,
-        get_key_array : get_key_array
+        listen       : listen,
+        get_shortcut : get_shortcut
     };
-
 }());

@@ -1,7 +1,5 @@
 (function(){
-
-    Keanu.listen(function(keystring, event){
-        console.log(keystring);
+    keanu = Keanu.listen(function(shortcut, event){
+        console.log(shortcut);
     });
-
 }());

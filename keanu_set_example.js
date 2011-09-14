@@ -9,7 +9,7 @@
 
         Keanu.get_shortcut({
             max_keys: 4,
-            on_update: function(shortcut){
+            on_update: function(shortcut, key_array){
                 shortcut_bar.innerHTML = shortcut;
             },
             on_set: function(shortcut){

@@ -112,11 +112,12 @@ Keanu = (function () {
         }
 
         var key_array = [],
-            key_index;
+            key, key_index;
 
         for(var key_index in keymap){
+            key = keymap[key_index];
             if(keymap.hasOwnProperty(key_index)){
-                key_array.push(keymap[key_index].which);
+                key_array.push(key.which);
             }
         }
 
@@ -191,9 +192,11 @@ Keanu = (function () {
 
 
     // Listen for new shortcuts being set
-    function get_shortcut(options) {
+    function get_shortcut(options, doc) {
         var // Internal tracking of keys pressed
             keys_pressed  = {},
+            // What to attach key events to
+            doc = typeof doc === 'undefined' ? window : doc;
             // Options
             max_keys = typeof(options.max_keys) === 'undefined' ? 0 : options.max_keys,
             // 
@@ -294,11 +297,11 @@ Keanu = (function () {
             keys_pressed = {};
 
             // Stop listeners
-            window.removeEventListener('keydown', keydown_listener);
-            window.removeEventListener('keyup', keyup_listener);
-            window.removeEventListener('mousedown', cancel);
-            window.removeEventListener('blur', cancel);
-            window.removeEventListener('focus', cancel);
+            doc.removeEventListener('keydown', keydown_listener);
+            doc.removeEventListener('keyup', keyup_listener);
+            doc.removeEventListener('mousedown', cancel);
+            doc.removeEventListener('blur', cancel);
+            doc.removeEventListener('focus', cancel);
 
             if(options.on_complete){
                 options.on_complete();
@@ -307,27 +310,31 @@ Keanu = (function () {
 
 
         // Init
-        window.addEventListener('keydown', keydown_listener, false);
-        window.addEventListener('keyup', keyup_listener, false);
-        window.addEventListener('mousedown', cancel, false);
+        doc.addEventListener('keydown', keydown_listener, false);
+        doc.addEventListener('keyup', keyup_listener, false);
+        doc.addEventListener('mousedown', cancel, false);
 
-        // Entering or leaving the window should cancel anything going on
-        window.addEventListener('blur', cancel, false);
-        window.addEventListener('focus', cancel, false);
+        // Entering or leaving the doc should cancel anything going on
+        doc.addEventListener('blur', cancel, false);
+        doc.addEventListener('focus', cancel, false);
     }
 
 
-    function listen(callback){
-        var keys_pressed = {};
+    function listen(callback, doc){
+        var keys_pressed = {},
+            doc = typeof doc === 'undefined' ? window : doc;
 
         function keydown_listener(event){
             if(
                 !event.target ||
                 event.target.tagName == 'BODY' ||
                 event.target.tagName == 'HTML' ||
+                event.target.tagName == 'html' ||
                 event.target == document.documentElement
             ){
                 var which = event.which;
+
+                console.log(which);
 
                 // Tear_down on these characters
                 if(CANCEL_ON.indexOf(String(which)) != -1){
@@ -335,7 +342,7 @@ Keanu = (function () {
                 }
 
                 if(keys_pressed[which] === undefined || keys_pressed[which].active === false){
-                    keys_pressed[which] = {event: event, active: true};
+                    keys_pressed[which] = {which: which, active: true};
                     dispatch_update(callback, keys_pressed, event);
                 }
             }
@@ -357,16 +364,19 @@ Keanu = (function () {
 
         function stop(){
             keys_pressed = {};
-            window.removeEventListener('keydown', keydown_listener, true);
-            window.removeEventListener('keyup', keyup_listener, true);
+
+            doc.removeEventListener('keydown', keydown_listener, true);
+            doc.removeEventListener('keyup', keyup_listener, true);
+
+            doc.removeEventListener('blur', cancel);
+            doc.removeEventListener('focus', cancel);
         }
 
-        window.addEventListener('keydown', keydown_listener, true);
-        window.addEventListener('keyup', keyup_listener, true);
-
-        // Entering and leaving the window should cancel any active presses
-        window.addEventListener('blur', cancel, true);
-        window.addEventListener('focus', cancel, true);
+        doc.addEventListener('keydown', keydown_listener, true);
+        doc.addEventListener('keyup', keyup_listener, true);
+        // Entering and leaving the doc should cancel any active presses
+        doc.addEventListener('blur', cancel, true);
+        doc.addEventListener('focus', cancel, true);
 
         return {
             stop: stop

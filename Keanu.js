@@ -334,8 +334,6 @@ Keanu = (function () {
             ){
                 var which = event.which;
 
-                console.log(which);
-
                 // Tear_down on these characters
                 if(CANCEL_ON.indexOf(String(which)) != -1){
                     return cancel();

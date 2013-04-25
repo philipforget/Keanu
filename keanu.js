@@ -1,22 +1,57 @@
-keanu = (function(){
-    var global_keys_pressed  = {},
-        keystring_callbacks = [],
-        os = get_os(),
-        //
-        MODIFIERS = {
-            16: os === 'darwin' ? '&#x21E7' : 'Shift',
-            17: os === 'darwin' ? '&#x2303' : 'Ctrl',
-            18: os === 'darwin' ? '&#x2325' : 'Alt',
-            91: '&#x2318', // Command
-            92: 'Meta'
-        },
-        // Special character transforms for displaying
+var keanu;
+
+(function (exports) {
+    // CommonJS
+    if (typeof module !== "undefined" && module.exports) {
+        module.exports = exports;
+    }
+    // AMD
+    else if (typeof define === "function") {
+        define(exports);
+    }
+    // <script>
+    else {
+        keanu = exports;
+    }
+}((function () {
+    var exports = {};
+
+    exports.name = 'keanu.js';
+    exports.version = '0.2';
+
+    var MODIFIERS = [
+            '17', 'Ctrl',
+            '224', 'Cmd'
+        ],
+        // Cancel if these are pressed
+        CANCEL_ON = [
+            '0',  // Escape
+            '27', // Escape
+            '8',  // Backspace
+            '46'  // Delete
+        ],
+        // Special character transforms for displaying properly
         TRANSFORMS = {
-            32: os === 'darwin' ? '&#x2423' : 'Space',
-            37:  '&larr;', // Left arrow
-            38:  '&uarr;', // Up arrow
-            39:  '&rarr;', // Right arrow
-            40:  '&darr;', // Down arrow
+            16: 'Shift',
+            17: 'Ctrl',
+            18: 'Alt',
+            28:  '\\',
+            32:  'Space',
+            92:  'Win',
+            224: 'Cmd'
+        },
+        //
+        browser_is_webkit = navigator.appVersion.indexOf('Chrome') !== -1;
+
+    // Webkit browsers report some funky characters for non-ascii characters
+    if(browser_is_webkit){
+        var webkit_transforms = {
+            13:  'Enter',
+            37:  'Left',
+            38:  'Up',
+            39:  'Down',
+            40:  'Right',
+            91:  'Cmd',
             112: 'F1',
             113: 'F2',
             114: 'F3',
@@ -29,7 +64,6 @@ keanu = (function(){
             121: 'F10',
             122: 'F11',
             123: 'F12',
-            13:  os === 'darwin' ? '&#x21b5' : 'Enter',
             186: ';',
             187: '=',
             188: ',',
@@ -40,253 +74,284 @@ keanu = (function(){
             219: '[',
             220: '\\',
             221: ']',
-            222: '\''
-        },
-        //
-        global_teardown_timeout;
-
-    function get_os(){
-        var oses = {
-            'Win'   : 'windows',
-            'Mac'   : 'darwin',
-            'Linux' : 'linux',
-            'X11'   : 'unix'
+            222: "'"
         };
-        for (var os_key in oses){
-            if(navigator.appVersion.indexOf(os_key) != -1){
-                return oses[os_key];
-            }
-        }
-        return 'unknown';
+
+        // Merge the transforms
+        for(var key in webkit_transforms)
+            TRANSFORMS[key] = webkit_transforms[key];
+
+        MODIFIERS.push('16');
+        MODIFIERS.push('Shift');
+        //
+        MODIFIERS.push('18');
+        MODIFIERS.push('Alt');
     }
 
-    function global_keydown_listener(event){
-        var which = event.which;
-        // Cancel on escape or tab
-        if(which === 27 || which === 9){
-            global_keys_pressed = {}; 
+    // Add the reverse transform relationships
+    for(var transform_key in TRANSFORMS){
+        if(TRANSFORMS.hasOwnProperty(transform_key)){
+            TRANSFORMS[TRANSFORMS[transform_key]] = transform_key;
+        }
+    }
+
+
+    // Test whether a key which is a modifier
+    function is_modifier(which){
+        return (
+            MODIFIERS.indexOf(which) !== -1 ||
+            MODIFIERS.indexOf(String(which)) !== -1
+        );
+    }
+
+
+    function transform_which(which){
+        return TRANSFORMS[which] || String.fromCharCode(Number(which));
+    }
+
+
+    // Sort an array of which entities
+    function sort_which(a, b){
+        if( is_modifier(a) === is_modifier(b) ){
+            return a - b;
+        }
+
+        // A is modifier
+        else if(is_modifier(a)){
+            return -1;
+        }
+
+        // Last case is that B is a modifier
+        return 1;
+    }
+
+
+    // Transform a key hash map to a sorted shortcut string
+    function keyarray_to_shortcut(keyarray){
+        if(typeof keyarray === 'undefined' || keyarray.length === 0){
             return;
         }
-        else if(global_keys_pressed[which] === undefined || global_keys_pressed[which].active === false){
-            global_keys_pressed[which] = {event: event, active: true};
-            dispatch_keystring(event);
 
-            clearTimeout(global_teardown_timeout);
-            global_teardown_timeout = setTimeout(global_teardown, 3000);
+        return keyarray.sort(sort_which).join('_');
+    }
+
+
+    // Given a shortcut string, return a shortcut array
+    function shortcut_to_keyarray(shortcut){
+        return shortcut.split('_').map(function(elem){
+            return String(elem);
+        }).sort(sort_which);
+    }
+
+
+    // Handle the actual dispatching of events
+    function dispatch_update(callback, keyarray){
+        if(typeof(callback) !== 'undefined'){
+            callback(
+                keyarray.length ? keyarray_to_shortcut(keyarray) : false
+            );
         }
     }
 
-    function global_teardown(){
-        global_keys_pressed = {};
-    }
-
-    function global_keyup_listener(event){
-        var which = event.which;
-        delete global_keys_pressed[which];
-        // Only dispatch constructive events
-        // dispatch_keystring(event);
-    }
-
-    function key_dict_to_string(key_dict){
-        var temp_array    = [],
-            return_string = "",
-            key_index;
-
-        if(key_dict === {}){
-            return false;
-        }
-
-        for(var key in key_dict){
-            if(key_dict.hasOwnProperty(key)){
-                temp_array.push(key);
+    function has_non_modifier(keyarray){
+        for(var i = 0; i < keyarray.length; i++){
+            if(!is_modifier(keyarray[i])){
+                return true;
             }
         }
-
-        temp_array.sort();
-
-        return temp_array.join("_");
+        return false;
     }
 
-    // Publish keystring events
-    function dispatch_keystring(event){
-        var keystring = key_dict_to_string(global_keys_pressed),
-            i;
 
-        if(keystring){
-            for(i = 0; i < keystring_callbacks.length; i++){
-                keystring_callbacks[i](event, key_dict_to_string(global_keys_pressed));
-            }
+    // Determine if a key event should be considered valid
+    function validate_event(event){
+        var which = String(event.which);
+
+        if (
+            (   // Keydown events from firefox are used to capture modifier
+                // keys.
+                !browser_is_webkit &&
+                event.type === 'keydown' &&
+                is_modifier(which)
+            ) ||
+            (   // Keypress events on firefox for normal characters
+                !browser_is_webkit &&
+                event.type === 'keypress'
+            ) ||
+            (   // Keydown events on webkit browsers for all keys
+                browser_is_webkit &&
+                event.type === 'keydown'
+            )
+        ){
+            return which;
         }
+
+        return false;
     }
 
-    function obj_len(obj){
-        if(Object.keys){
-            return Object.keys(obj).length;
-        }
-        else {
-            var return_length = 0, key;
-            for(key in obj){
-                if(obj.hasOwnProperty(key)){
-                    return_length += 1;
-                }
-            }
-            return return_length;
-        }
-    }
 
-    // Listen for new shortcuts
-    function listen(options){
-        var keys_pressed  = {},
-            //
-            max_keys = typeof(options.max_keys) === 'undefined' ? 0 : options.max_keys,
-            // 
-            CLEANUP_DELAY = 200;
+    // Listen for new shortcuts being set
+    function get_shortcut(options, passed_doc) {
+        var // Internal tracking of keys pressed
+            keyarray  = [],
+            // What to attach key events to
+            doc = typeof passed_doc === 'undefined' ? window : passed_doc,
+            // Options
+            max_keys = typeof(options.max_keys) === 'undefined' ? 0 : options.max_keys;
 
-        // Start the listeners
-        $(document).bind('keydown', keydown_listener);
-        $(document).bind('keyup', keyup_listener);
-        $(document).bind('mousedown', cancel);
 
         function keydown_listener(event){
             event.preventDefault();
-            event.stopImmediatePropagation();
-            var which = event.which;
+            var which = validate_event(event);
 
-            // tear_down on these characters
-            if(
-                which === 27 || // Escape
-                which === 8  || // Backspace
-                which === 46    // Delete
-            ){
-                cancel();
-                return;
+            if(which){
+                if(CANCEL_ON.indexOf(which) !== -1){
+                    return cancel(event);
+                }
+
+                else if(
+                    keyarray.indexOf(which) === -1 &&
+                    // And we cant go over max keys
+                    keyarray.length < max_keys
+                ){
+                    keyarray.push(which);
+                    dispatch_update(options.on_update, keyarray);
+                }
             }
 
-            if(
-                (!max_keys || obj_len(keys_pressed) < max_keys) &&
-                (keys_pressed[which] === undefined || keys_pressed[which].active === false)
-            ){
-                keys_pressed[which] = {event: event, active: true}; 
-                dispatch_update();
-            }
         }
 
-        // Dispatch the keystring to the on_update callback
-        function dispatch_update(){
-            if(options.on_update){
-                options.on_update(keys_pressed === {} ? false : key_dict_to_string(keys_pressed));
-            }
-        }
 
         function keyup_listener(event){
             event.preventDefault();
-            var which = event.which;
-            // Short circuit on command key release or else the keyup function
-            // of the other keys wont ever fire.
-            if(which === 91){
-                set_shortcut();
-                return;
-            }
-
-            if(keys_pressed[which]){
-                keys_pressed[which].active = false;
-                setTimeout(remove_inactive_keypress, CLEANUP_DELAY, which);
-                for(var press_index in keys_pressed){
-                    // If any of the keys are still pressed, keep listening
-                    if(keys_pressed[press_index].active){
-                        return;
-                    }
-                }
-                set_shortcut();
-            }
+            return tear_down();
         }
 
-        // After CLEANUP_DELAY, remove the key based on the keycode if it exists and is inactive
-        function remove_inactive_keypress(which){
-            if(keys_pressed[which] && keys_pressed[which].active === false){
-                delete keys_pressed[which];
-                dispatch_update();
-            }
-        }
 
-        function set_shortcut(){
-            // Verify that we have at least one non-modifier and any optional modifiers
-            var has_modifier     = false,
-                has_non_modifier = false;
-
-            // Convert the key hash to an array
-            for(var which in keys_pressed){
-                if(MODIFIERS[which]){
-                    has_modifier = true;
-                }
-                else {
-                    has_non_modifier = true;
-                }
-            }
-
-            // Invalid keys_pressed
-            if(!has_non_modifier){
-                keys_pressed = {};
-            }
-
-            tear_down();
-        }
-
+        // Cancel everything
         function cancel(event){
-            // Trap the global mousedown event
             if(event){
                 event.preventDefault();
                 event.stopPropagation();
             }
-            keys_pressed = {};
-            tear_down();
+            keyarray = [];
+            return tear_down();
         }
 
-        // Shut. Down. Everything
+
         function tear_down(){
-            if(options.on_set){
-                options.on_set(keys_pressed === {} ? false : key_dict_to_string(keys_pressed));
+            if(!has_non_modifier(keyarray)){
+                keyarray = [];
             }
 
-            // Setting this to an empty object keeps any queued up cleanup
-            // events from firing
-            keys_pressed = {};
+            if(options.on_set){
+                dispatch_update(options.on_set, keyarray);
+            }
 
-            // Stop listeners
-            $(document).unbind('keydown', keydown_listener);
-            $(document).unbind('keyup', keyup_listener);
-            $(document).unbind('mousedown', cancel);
+            keyarray = [];
+
+            doc.removeEventListener('keypress', keydown_listener, true);
+            doc.removeEventListener('keydown', keydown_listener, true);
+            doc.removeEventListener('keyup', keyup_listener, true);
+
+            doc.removeEventListener('mousedown', cancel, true);
+            doc.removeEventListener('blur', cancel, true);
+            doc.removeEventListener('focus', cancel, true);
 
             if(options.on_complete){
                 options.on_complete();
             }
         }
+
+
+        doc.addEventListener('keypress', keydown_listener, true);
+        doc.addEventListener('keydown', keydown_listener, true);
+        doc.addEventListener('keyup', keyup_listener, true);
+
+        // Entering or leaving the doc should cancel anything going on
+        doc.addEventListener('mousedown', cancel, true);
+        doc.addEventListener('blur', cancel, true);
+        doc.addEventListener('focus', cancel, true);
     }
 
-    // Add keystring event subscribers
-    function add_keystring_listener(callback){
-        keystring_callbacks.push(callback);
+
+    function listen(callback, passed_doc){
+        var keyarray = [],
+            doc = typeof passed_doc === 'undefined' ? window : passed_doc;
+
+
+        function keydown_listener(event){
+            var which = validate_event(event),
+                whichNotInArr = keyarray.indexOf(which) === -1,
+                eventIsValid = (
+                    !event.target ||
+                    event.target.tagName == 'BODY' ||
+                    event.target.tagName == 'HTML' ||
+                    event.target.tagName == 'html' ||
+                    event.target.tagName == 'DIV' ||
+                    event.target.tagName == 'div' ||
+                    event.target == document.documentElement
+                );
+
+
+
+            if (which && whichNotInArr && eventIsValid) {
+                if (CANCEL_ON.indexOf(which) !== -1){
+                    return cancel();
+                }
+
+                keyarray.push(which);
+                dispatch_update(callback, keyarray);
+            }
+        }
+
+
+        function keyup_listener(event){
+            if(keyarray.length){
+                dispatch_update(callback, keyarray);
+                keyarray = [];
+            }
+        }
+
+
+        function cancel(){
+            keyarray = [];
+            return false;
+        }
+
+
+        function stop(){
+            keyarray = [];
+
+            doc.removeEventListener('keypress', keydown_listener, true);
+            doc.removeEventListener('keydown', keydown_listener, true);
+            doc.removeEventListener('keyup', keyup_listener, true);
+
+            doc.removeEventListener('blur', cancel);
+            doc.removeEventListener('focus', cancel);
+        }
+
+        doc.addEventListener('keypress', keydown_listener, true);
+        doc.addEventListener('keydown', keydown_listener, true);
+        doc.addEventListener('keyup', keyup_listener, true);
+
+        // Entering and leaving the doc should cancel any active presses
+        doc.addEventListener('blur', cancel, true);
+        doc.addEventListener('focus', cancel, true);
+
+        return {
+            stop: stop
+        };
     }
 
-    function add_global_listeners(){
-        window.addEventListener('keydown', global_keydown_listener, true);
-        window.addEventListener('keyup', global_keyup_listener, true);
-    }
+    // TODO: We might just want to declare each function as a member of exports
+    // instead of doing it here.
+    exports.listen = listen;
+    exports.get_shortcut = get_shortcut;
+    exports.keyarray_to_shortcut = keyarray_to_shortcut;
+    exports.shortcut_to_keyarray = shortcut_to_keyarray;
+    exports.transform_which = transform_which;
+    exports.is_modifier = is_modifier;
 
-    function remove_global_listeners(){
-        window.removeEventListener('keydown', global_keydown_listener, true);
-        window.removeEventListener('keyup', global_keyup_listener, true);
-    }
-
-    function init(){
-        add_global_listeners();
-    }
-
-    return  {
-        init: init,
-        add_keystring_listener: add_keystring_listener,
-        listen: listen,
-        MODIFIERS: MODIFIERS,
-        TRANSFORMS: TRANSFORMS
-    };
-}());
+    return exports;
+}())));

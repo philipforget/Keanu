@@ -17,7 +17,7 @@ var keanu;
     var exports = {};
 
     exports.name = 'keanu.js';
-    exports.version = '0.2';
+    exports.version = '0.3';
 
     var MODIFIERS = [
             '17', 'Ctrl',
@@ -289,6 +289,7 @@ var keanu;
                     event.target.tagName == 'HTML' ||
                     event.target.tagName == 'html' ||
                     event.target.tagName == 'DIV' ||
+                    event.target.tagName == 'ARTICLE' ||
                     event.target.tagName == 'div' ||
                     event.target == document.documentElement
                 );

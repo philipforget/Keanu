@@ -294,7 +294,15 @@ var keanu;
                     event.target == document.documentElement
                 );
 
-
+            //Sites like gmail and Twitter have text inputs that are just divs
+            //with contenteditable set to true. Shortcuts should not fire for
+            //them. This should only run once we know the event is otherwise
+            //valid.
+            if (eventIsValid) {
+                if (event.target.getAttribute('contenteditable')) {
+                    eventIsValid = false;
+                }
+            }
 
             if (which && whichNotInArr && eventIsValid) {
                 if (CANCEL_ON.indexOf(which) !== -1){

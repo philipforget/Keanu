@@ -39,54 +39,49 @@ var keanu;
             32:  'Space',
             92:  'Win',
             224: 'Cmd'
-        },
-        //
-        browser_is_webkit = navigator.appVersion.indexOf('Chrome') !== -1;
-
-    // Webkit browsers report some funky characters for non-ascii characters
-    if(browser_is_webkit){
-        var webkit_transforms = {
-            13:  'Enter',
-            37:  'Left',
-            38:  'Up',
-            39:  'Down',
-            40:  'Right',
-            91:  'Cmd',
-            112: 'F1',
-            113: 'F2',
-            114: 'F3',
-            115: 'F4',
-            116: 'F5',
-            117: 'F6',
-            118: 'F7',
-            119: 'F8',
-            120: 'F9',
-            121: 'F10',
-            122: 'F11',
-            123: 'F12',
-            186: ';',
-            187: '=',
-            188: ',',
-            189: '-',
-            190: '.',
-            191: '/',
-            192: '`',
-            219: '[',
-            220: '\\',
-            221: ']',
-            222: "'"
         };
 
-        // Merge the transforms
-        for(var key in webkit_transforms)
-            TRANSFORMS[key] = webkit_transforms[key];
+    var webkit_transforms = {
+        13:  'Enter',
+        37:  'Left',
+        38:  'Up',
+        39:  'Down',
+        40:  'Right',
+        91:  'Cmd',
+        112: 'F1',
+        113: 'F2',
+        114: 'F3',
+        115: 'F4',
+        116: 'F5',
+        117: 'F6',
+        118: 'F7',
+        119: 'F8',
+        120: 'F9',
+        121: 'F10',
+        122: 'F11',
+        123: 'F12',
+        186: ';',
+        187: '=',
+        188: ',',
+        189: '-',
+        190: '.',
+        191: '/',
+        192: '`',
+        219: '[',
+        220: '\\',
+        221: ']',
+        222: '\''
+    };
 
-        MODIFIERS.push('16');
-        MODIFIERS.push('Shift');
-        //
-        MODIFIERS.push('18');
-        MODIFIERS.push('Alt');
-    }
+    // Merge the transforms
+    for(var key in webkit_transforms)
+        TRANSFORMS[key] = webkit_transforms[key];
+
+    MODIFIERS.push('16');
+    MODIFIERS.push('Shift');
+    //
+    MODIFIERS.push('18');
+    MODIFIERS.push('Alt');
 
     // Add the reverse transform relationships
     for(var transform_key in TRANSFORMS){
@@ -96,7 +91,7 @@ var keanu;
     }
 
 
-    // Test whether a key which is a modifier
+    // Test whether a key is a modifier
     function is_modifier(which){
         return (
             MODIFIERS.indexOf(which) !== -1 ||
@@ -162,27 +157,25 @@ var keanu;
         return false;
     }
 
+    function has_modifier(keyarray){
+        for(var i = 0; i < keyarray.length; i++){
+            if(is_modifier(keyarray[i])){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function has_function_key(keyarray){
+        var friendlyShortcut = get_friendly_shortcut(keyarray_to_shortcut(keyarray));
+        return 'F1?[0-9]'.search(friendlyShortcut) != -1;
+    }
 
     // Determine if a key event should be considered valid
     function validate_event(event){
         var which = String(event.which);
 
-        if (
-            (   // Keydown events from firefox are used to capture modifier
-                // keys.
-                !browser_is_webkit &&
-                event.type === 'keydown' &&
-                is_modifier(which)
-            ) ||
-            (   // Keypress events on firefox for normal characters
-                !browser_is_webkit &&
-                event.type === 'keypress'
-            ) ||
-            (   // Keydown events on webkit browsers for all keys
-                browser_is_webkit &&
-                event.type === 'keydown'
-            )
-        ){
+        if (event.type === 'keydown') {
             return which;
         }
 
@@ -353,6 +346,63 @@ var keanu;
         };
     }
 
+
+    function get_friendly_shortcut (shortcut) {
+        var friendlyShortcut = '',
+            shortcutArr = keanu.shortcut_to_keyarray(shortcut),
+            which = null;
+
+        for (var i = 0; i < shortcutArr.length; i += 1) {
+            which = shortcutArr[i];
+            friendlyShortcut += keanu.transform_which(which);
+
+            if (i < shortcutArr.length -1) {
+                friendlyShortcut += ' + ';
+            }
+        }
+        return friendlyShortcut;
+    }
+
+
+    function shortcut_to_firefox_hotkey(shortcut) {
+        function transform_names(match) {
+            switch(match) {
+                case 'cmd':
+                    return 'meta';
+                case 'ctrl':
+                    return 'control';
+                default:
+                    return match;
+            }
+        }
+        var friendlyShortcut = get_friendly_shortcut(shortcut).toLowerCase().replace(/ \+ /g, '-');
+        return friendlyShortcut.replace(/cmd|ctrl/gi, transform_names);
+    }
+
+
+    function firefox_to_friendly(shortcut) {
+        if(shortcut == null) {
+            return null;
+        }
+        function transform_names(match) {
+            switch(match) {
+                case 'meta':
+                    return 'Cmd';
+                case 'control':
+                    return 'Ctrl';
+                case 'shift':
+                    return 'Shift';
+                case 'alt':
+                    return 'Alt';
+                default:
+                    return match;
+            }
+        }
+        var output = shortcut.toLowerCase().replace(/-/g, ' + ');
+        output = output.replace(/meta|control|shift|alt/gi, transform_names);
+        return output;
+    }
+
     // TODO: We might just want to declare each function as a member of exports
     // instead of doing it here.
     exports.listen = listen;
@@ -361,6 +411,12 @@ var keanu;
     exports.shortcut_to_keyarray = shortcut_to_keyarray;
     exports.transform_which = transform_which;
     exports.is_modifier = is_modifier;
+    exports.has_modifier = has_modifier;
+    exports.has_function_key = has_function_key;
+    exports.has_non_modifier = has_non_modifier;
+    exports.get_friendly_shortcut = get_friendly_shortcut;
+    exports.shortcut_to_firefox_hotkey = shortcut_to_firefox_hotkey;
+    exports.firefox_to_friendly = firefox_to_friendly;
 
     return exports;
 }())));
